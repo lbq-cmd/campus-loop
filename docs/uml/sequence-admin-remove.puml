@@ -1,0 +1,33 @@
+@startuml 时序图-管理员强制下架
+skinparam defaultFontName Microsoft YaHei
+autonumber
+
+actor 管理员 as Admin
+participant "AdminFrame\n(迭代三)" as UI
+participant ItemService as IS
+participant UserDao as UD
+participant ItemDao as ID
+database "SQLite" as DB
+
+Admin -> UI : 选中违规物品，点击"强制下架"
+UI -> IS : removeByAdmin(operatorId, itemId)
+IS -> UD : findById(operatorId)
+UD -> DB : SELECT ... FROM users WHERE id = ?
+DB --> UD : 操作者记录
+alt 非管理员或账号被封禁
+    IS --> UI : PermissionDeniedException("需要管理员权限")
+else 管理员
+    IS -> ID : findById(itemId)
+    ID -> DB : SELECT ... FROM items WHERE id = ?
+    DB --> ID : 物品记录 / 空
+    alt 物品不存在
+        IS --> UI : NotFoundException("物品不存在")
+    else 存在
+        IS -> ID : updateStatus(itemId, REMOVED)
+        ID -> DB : UPDATE items SET status = 'REMOVED', updated_at = ?
+        IS -> IS : 记录操作日志
+        IS --> UI : 状态为 REMOVED 的物品
+        UI --> Admin : 提示"已强制下架"
+    end
+end
+@enduml

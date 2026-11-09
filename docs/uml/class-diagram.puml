@@ -1,0 +1,257 @@
+@startuml 类图-整体结构
+' 迭代二核心类图：domain / dao / service / common 四层
+!pragma layout smetana
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam defaultFontName Microsoft YaHei
+hide empty members
+
+package "domain 领域模型" #F7F3EA {
+  class User <<entity>> {
+    -id: Long
+    -username: String
+    -passwordHash: String
+    -nickname: String
+    -contact: String
+    -role: Role
+    -status: UserStatus
+    -creditScore: int
+    -createdAt: LocalDateTime
+    -lastLoginAt: LocalDateTime
+    +isAdmin(): boolean
+    +withProfile(nickname, contact): User
+    +withPasswordHash(hash): User
+    +withStatus(status): User
+    +withCreditScore(score): User
+  }
+  class Item <<entity>> {
+    -id: Long
+    -ownerId: long
+    -categoryId: long
+    -title: String
+    -description: String
+    -itemType: ItemType
+    -price: double
+    -condition: ItemCondition
+    -status: ItemStatus
+    -tags: List<String>
+    -viewCount: int
+    -createdAt: LocalDateTime
+    -updatedAt: LocalDateTime
+    +builder(): Builder
+    +toBuilder(): Builder
+    +isOnline(): boolean
+  }
+  class ItemBuilder <<Builder>> {
+    +ownerId(long): Builder
+    +title(String): Builder
+    +itemType(ItemType): Builder
+    +price(double): Builder
+    +tags(List): Builder
+    +build(): Item
+  }
+  class Category <<entity>> {
+    -id: Long
+    -name: String
+    -description: String
+    -sortOrder: int
+  }
+  class SearchCriteria <<Builder>> {
+    -keyword: String
+    -categoryId: Long
+    -ownerId: Long
+    -itemType: ItemType
+    -status: ItemStatus
+    -minPrice: Double
+    -maxPrice: Double
+    -limit: int
+    +builder(): Builder
+  }
+  enum Role {
+    STUDENT
+    ADMIN
+  }
+  enum UserStatus {
+    ACTIVE
+    BANNED
+  }
+  enum ItemType {
+    SELL
+    EXCHANGE
+    FREE
+  }
+  enum ItemCondition {
+    NEW
+    LIKE_NEW
+    GOOD
+    FAIR
+  }
+  enum ItemStatus {
+    ONLINE
+    OFF_SHELF
+    LOCKED
+    SOLD
+    REMOVED
+  }
+}
+
+package "dao 数据访问" #E8F0EC {
+  interface UserDao <<interface>> {
+    +insert(User): long
+    +update(User): int
+    +findById(long): Optional<User>
+    +findByUsername(String): Optional<User>
+    +existsByUsername(String): boolean
+    +search(String, int): List<User>
+    +touchLastLogin(long, LocalDateTime): void
+  }
+  interface ItemDao <<interface>> {
+    +insert(Item): long
+    +update(Item): int
+    +findById(long): Optional<Item>
+    +search(SearchCriteria): List<Item>
+    +updateStatus(long, ItemStatus): int
+    +incrementViewCount(long): void
+    +deleteById(long): int
+    +countByOwner(long): int
+  }
+  interface CategoryDao <<interface>> {
+    +insert(Category): long
+    +findById(long): Optional<Category>
+    +findByName(String): Optional<Category>
+    +findAll(): List<Category>
+    +existsByName(String): boolean
+  }
+  interface FavoriteDao <<interface>> {
+    +add(long, long): boolean
+    +remove(long, long): boolean
+    +exists(long, long): boolean
+    +findItemIdsByUser(long): List<Long>
+    +countByItem(long): int
+  }
+  interface DaoFactory <<interface>> {
+    +userDao(): UserDao
+    +itemDao(): ItemDao
+    +categoryDao(): CategoryDao
+    +favoriteDao(): FavoriteDao
+  }
+  class SqliteDaoFactory <<singleton>> {
+    -{static} defaultInstance: SqliteDaoFactory
+    +{static} getDefault(): SqliteDaoFactory
+  }
+  class JdbcUserDao
+  class JdbcItemDao
+  class JdbcCategoryDao
+  class JdbcFavoriteDao
+}
+
+package "service 业务服务" #F3E7E0 {
+  class UserService {
+    -userDao: UserDao
+    -passwordEncoder: PasswordEncoder
+    +register(UserCommand): User
+    +login(String, String): User
+    +changePassword(long, String, String): void
+    +updateProfile(long, String, String): User
+    +changeUserStatus(long, long, boolean): User
+    +adjustCredit(long, int): User
+    +listUsers(long, String): List<User>
+  }
+  class ItemService {
+    -itemDao: ItemDao
+    -userDao: UserDao
+    -categoryDao: CategoryDao
+    -favoriteDao: FavoriteDao
+    +publish(long, ItemCommand): Item
+    +update(long, long, ItemCommand): Item
+    +offShelf(long, long): Item
+    +relist(long, long): Item
+    +removeByAdmin(long, long): Item
+    +search(SearchCriteria, ItemSorter): List<Item>
+    +favorite(long, long): boolean
+    +listFavorites(long): List<Item>
+  }
+  interface ItemSorter <<interface>> {
+    +getName(): String
+    +comparator(): Comparator<Item>
+  }
+  class ItemSorters <<utility>> {
+    +{static} NEWEST: ItemSorter
+    +{static} PRICE_ASC: ItemSorter
+    +{static} PRICE_DESC: ItemSorter
+    +{static} HOTTEST: ItemSorter
+    +{static} byName(String): ItemSorter
+  }
+  class UserCommand
+  class ItemCommand
+}
+
+package "common 公共基础" #EFEFF5 {
+  class Database <<singleton>> {
+    -{static} defaultInstance: Database
+    -url: String
+    +{static} getDefault(): Database
+    +getConnection(): Connection
+    +inTransaction(TxWork<T>): T
+  }
+  class PasswordEncoder {
+    +encode(CharSequence): String
+    +matches(CharSequence, String): boolean
+  }
+  class ValidationUtils <<utility>>
+  class SchemaLoader <<utility>>
+  class Logs <<utility>>
+  class CampusException
+  class ValidationException
+  class AuthenticationException
+  class PermissionDeniedException
+  class DuplicateException
+  class NotFoundException
+  class DataAccessException
+}
+
+User --> Role
+User --> UserStatus
+Item --> ItemType
+Item --> ItemCondition
+Item --> ItemStatus
+Item --> ItemBuilder : creates
+SearchCriteria --> ItemStatus
+
+UserService --> UserDao
+UserService --> PasswordEncoder
+UserService --> UserCommand
+ItemService --> ItemDao
+ItemService --> UserDao
+ItemService --> CategoryDao
+ItemService --> FavoriteDao
+ItemService --> ItemCommand
+ItemService --> ItemSorter
+ItemService --> SearchCriteria
+ItemSorters ..|> ItemSorter
+ItemSorters ..> Item
+
+DaoFactory ..> UserDao
+DaoFactory ..> ItemDao
+DaoFactory ..> CategoryDao
+DaoFactory ..> FavoriteDao
+SqliteDaoFactory ..|> DaoFactory
+JdbcUserDao ..|> UserDao
+JdbcItemDao ..|> ItemDao
+JdbcCategoryDao ..|> CategoryDao
+JdbcFavoriteDao ..|> FavoriteDao
+
+JdbcUserDao --> Database
+JdbcItemDao --> Database
+JdbcCategoryDao --> Database
+JdbcFavoriteDao --> Database
+
+CampusException <|-- ValidationException
+CampusException <|-- AuthenticationException
+CampusException <|-- PermissionDeniedException
+CampusException <|-- DuplicateException
+CampusException <|-- NotFoundException
+CampusException <|-- DataAccessException
+UserService ..> CampusException
+ItemService ..> CampusException
+@enduml

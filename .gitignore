@@ -1,0 +1,12 @@
+target/
+data/
+logs/
+*.db
+*.db-journal
+.idea/
+*.iml
+.vscode/
+_smoke/
+_patch.py
+_strip_bom.py
+cp.txt

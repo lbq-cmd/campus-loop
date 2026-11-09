@@ -1,0 +1,48 @@
+@startuml 时序图-用户注册与登录
+skinparam defaultFontName Microsoft YaHei
+autonumber
+
+actor 学生 as Student
+participant "ConsoleApp\n(迭代三为 LoginFrame)" as UI
+participant UserService as US
+participant PasswordEncoder as PE
+participant UserDao as UD
+database "SQLite" as DB
+
+== 注册 ==
+Student -> UI : 输入用户名/密码/昵称
+UI -> US : register(UserCommand)
+US -> US : 校验用户名格式、密码强度、昵称长度
+US -> UD : existsByUsername(username)
+UD -> DB : SELECT 1 FROM users WHERE username = ?
+DB --> UD : 结果
+UD --> US : false
+US -> PE : encode(rawPassword)
+PE --> US : pbkdf2$迭代次数$盐$派生值
+US -> UD : insert(new User(...ACTIVE, 信用 100))
+UD -> DB : INSERT INTO users ...
+DB --> UD : 自增主键
+UD --> US : userId
+US --> UI : 注册成功的 User
+UI --> Student : 提示"注册成功"
+
+== 登录 ==
+Student -> UI : 输入用户名/密码
+UI -> US : login(username, rawPassword)
+US -> UD : findByUsername(username)
+UD -> DB : SELECT ... FROM users WHERE username = ?
+DB --> UD : 用户记录 / 空
+alt 用户不存在或密码错误
+    US --> UI : AuthenticationException("用户名或密码错误")
+    UI --> Student : 统一错误提示（防账号枚举）
+else 账号已封禁
+    US --> UI : AuthenticationException("账号已被封禁")
+else 校验通过
+    US -> PE : matches(rawPassword, storedHash)
+    PE --> US : true
+    US -> UD : touchLastLogin(userId, now)
+    UD -> DB : UPDATE users SET last_login_at = ?
+    US --> UI : 最新 User
+    UI --> Student : 进入主界面
+end
+@enduml

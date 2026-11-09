@@ -1,0 +1,37 @@
+@startuml 时序图-发布物品
+skinparam defaultFontName Microsoft YaHei
+autonumber
+
+actor 学生 as Student
+participant "ConsoleApp\n(迭代三为 PublishItemDialog)" as UI
+participant ItemService as IS
+participant UserDao as UD
+participant CategoryDao as CD
+participant ItemDao as ID
+database "SQLite" as DB
+
+Student -> UI : 填写标题/分类/流转方式/价格/标签
+UI -> IS : publish(ownerId, ItemCommand)
+IS -> UD : findById(ownerId)
+UD -> DB : SELECT ... FROM users WHERE id = ?
+DB --> UD : 用户记录
+alt 用户被封禁
+    IS --> UI : PermissionDeniedException("账号已被封禁")
+else 用户正常
+    IS -> IS : 校验标题/描述/价格规则/标签
+    IS -> CD : findById(categoryId)
+    CD -> DB : SELECT ... FROM categories WHERE id = ?
+    DB --> CD : 分类记录 / 空
+    alt 分类不存在
+        IS --> UI : ValidationException("所选分类不存在")
+    else 校验通过
+        IS -> IS : Item.builder()...build()
+        IS -> ID : insert(Item)
+        ID -> DB : INSERT INTO items (...) VALUES (...)
+        DB --> ID : 自增主键
+        ID --> IS : itemId
+        IS --> UI : 完整 Item
+        UI --> Student : "发布成功"
+    end
+end
+@enduml
